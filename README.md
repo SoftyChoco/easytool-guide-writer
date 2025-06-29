@@ -37,13 +37,26 @@ git clone https://github.com/yourusername/easytool-guide-writer.git
 cd easytool-guide-writer
 ```
 
-### 2. 필요 패키지 설치
+### 2. 가상환경 설정
+
+```bash
+# 가상환경 생성
+python -m venv venv
+
+# 가상환경 활성화
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
+```
+
+### 3. 필요 패키지 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 환경 변수 설정
+### 4. 환경 변수 설정
 
 프로젝트 루트 디렉토리에 `.env` 파일을 생성하고 Google Gemini API 키를 추가합니다:
 
@@ -53,7 +66,7 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 
 Google Gemini API 키는 [Google AI Studio](https://aistudio.google.com/apikey)에서 발급받을 수 있습니다. Gemini 2.5 Flash 모델은 일정량까지 무료로 제공됩니다. 자세한 가격 정보는 [Gemini API 가격 책정 페이지](https://ai.google.dev/gemini-api/docs/pricing?hl=ko#gemini-2.5-flash)에서 확인할 수 있습니다.
 
-### 4. 데이터베이스 초기화
+### 5. 데이터베이스 초기화
 
 ```bash
 python setup.py
