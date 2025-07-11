@@ -16,7 +16,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('easytool')
 
-load_dotenv()
+# .env 파일에서 환경 변수를 로드하고 기존 환경 변수를 덮어씁니다.
+load_dotenv(override=True)
 API_KEY = os.getenv("GOOGLE_API_KEY")
 
 class PipelineError(Exception):
@@ -126,12 +127,27 @@ def fix_invalid_escapes(json_str):
     
     return result
 
+def fix_missing_commas(json_str):
+    """
+    JSON 문자열에서 누락된 콤마를 감지하고 수정합니다.
+    특히 'Expecting ',' delimiter' 오류를 해결하기 위한 함수입니다.
+    """
+    # 객체 내에서 누락된 콤마 수정 (속성 사이)
+    # 예: {"a": 1 "b": 2} -> {"a": 1, "b": 2}
+    json_str = re.sub(r'(\d+|true|false|null|"[^"]*")\s*("[\w\s]+"\s*:)', r'\1, \2', json_str)
+    
+    # 배열 내에서 누락된 콤마 수정 (요소 사이)
+    # 예: [1 2 3] -> [1, 2, 3]
+    json_str = re.sub(r'(\d+|true|false|null|"[^"]*")\s+(\d+|true|false|null|")', r'\1, \2', json_str)
+    
+    return json_str
+
 def run_ai_agent(model, agent_name, prompt, is_json_output=False):
     """
     모든 AI Agent의 API 호출을 처리하는 단일 범용 함수.
     실패 시 PipelineError를 발생시킵니다.
     """
-    print(f"\n[AGENT: {agent_name}] 작업을 시작합니다...")
+    # 시작 메시지 출력 제거 (main.py에서 출력함)
     try:
         config = {"response_mime_type": "application/json"} if is_json_output else {}
         response = model.generate_content(prompt, generation_config=config)
@@ -151,6 +167,9 @@ def run_ai_agent(model, agent_name, prompt, is_json_output=False):
             
             # 잘못된 이스케이프 시퀀스 수정 (첫 번째 시도)
             response_text = fix_invalid_escapes(response_text)
+            
+            # 누락된 콤마 수정 (새로 추가)
+            response_text = fix_missing_commas(response_text)
             
             sanitized_text = sanitize_json_string(response_text)
             
@@ -188,6 +207,32 @@ def run_ai_agent(model, agent_name, prompt, is_json_output=False):
                     # 잘못된 이스케이프 시퀀스 수정
                     clean_text = fix_invalid_escapes(clean_text)
                     
+                    # 누락된 콤마 수정 (새로 추가)
+                    clean_text = fix_missing_commas(clean_text)
+                    
+                    # 따옴표 정리 (새로 추가)
+                    # 중첩된 따옴표 문제 해결 시도
+                    clean_text = re.sub(r'(?<!\\)\\{2,}"', '\\"', clean_text)
+                    
+                    # 중괄호와 대괄호 균형 확인 및 수정 (새로 추가)
+                    open_braces = clean_text.count('{')
+                    close_braces = clean_text.count('}')
+                    if open_braces > close_braces:
+                        clean_text += '}' * (open_braces - close_braces)
+                    elif close_braces > open_braces:
+                        clean_text = '{' * (close_braces - open_braces) + clean_text
+                    
+                    open_brackets = clean_text.count('[')
+                    close_brackets = clean_text.count(']')
+                    if open_brackets > close_brackets:
+                        clean_text += ']' * (open_brackets - close_brackets)
+                    elif close_brackets > open_brackets:
+                        clean_text = '[' * (close_brackets - open_brackets) + clean_text
+                    
+                    # 마지막 속성 뒤에 콤마가 있으면 제거 (새로 추가)
+                    clean_text = re.sub(r',\s*}', '}', clean_text)
+                    clean_text = re.sub(r',\s*]', ']', clean_text)
+                    
                     result = json.loads(clean_text)
                     logger.info("최종 정리 시도로 JSON 파싱 성공")
                 except Exception as final_e:
@@ -201,6 +246,20 @@ def run_ai_agent(model, agent_name, prompt, is_json_output=False):
                         valid_escapes = '"\\/' + 'bfnrtu'
                         for char in valid_escapes:
                             escaped_text = escaped_text.replace('\\\\' + char, '\\' + char)
+                        
+                        # 새로 추가: 더 강력한 정규식 기반 JSON 정리
+                        # 1. 모든 속성 이름에 따옴표 추가
+                        escaped_text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', escaped_text)
+                        
+                        # 2. 누락된 콤마 수정 (다시 시도)
+                        escaped_text = fix_missing_commas(escaped_text)
+                        
+                        # 3. 중괄호와 대괄호 균형 다시 확인
+                        open_braces = escaped_text.count('{')
+                        close_braces = escaped_text.count('}')
+                        if open_braces > close_braces:
+                            escaped_text += '}' * (open_braces - close_braces)
+                        
                         result = json.loads(escaped_text)
                         logger.info("백슬래시 이스케이프 처리 후 JSON 파싱 성공")
                     except Exception:
@@ -212,14 +271,38 @@ def run_ai_agent(model, agent_name, prompt, is_json_output=False):
                                 error_char = response_text[e.pos] if e.pos < len(response_text) else "문자열 끝"
                                 logger.critical(f"오류 발생 문자: '{error_char}' (ASCII: {ord(error_char) if e.pos < len(response_text) else 'N/A'})")
                         
-                        raise PipelineError(f"AI 응답을 JSON으로 파싱할 수 없습니다: {e}")
+                        # 최후의 수단: 모델에게 다시 요청하기
+                        try:
+                            # 원본 응답에 문제가 있으므로 모델에게 JSON 형식으로 다시 정리해달라고 요청
+                            fix_prompt = f"""
+                            다음 텍스트를 유효한 JSON으로 수정해주세요. 특히 콤마 누락, 따옴표 불일치 등의 문제를 해결해주세요:
+                            
+                            {response_text}
+                            
+                            수정된 JSON만 반환해주세요. 다른 설명은 필요 없습니다.
+                            """
+                            
+                            fix_response = model.generate_content(fix_prompt)
+                            fixed_json = fix_response.text.strip()
+                            
+                            # 응답에서 JSON 블록 추출
+                            json_match = re.search(r'({[\s\S]*})', fixed_json)
+                            if json_match:
+                                fixed_json = json_match.group(1)
+                            
+                            # 수정된 JSON 파싱 시도
+                            result = json.loads(fixed_json)
+                            logger.info("모델을 통한 JSON 수정 후 파싱 성공")
+                        except Exception as model_fix_error:
+                            logger.critical(f"모델을 통한 JSON 수정 시도도 실패: {model_fix_error}")
+                            raise PipelineError(f"AI 응답을 JSON으로 파싱할 수 없습니다: {e}")
         else:
             result = response.text
             
         if not result:
             logger.error("AI 응답 결과가 비어 있음")
             raise PipelineError("결과물이 비어 있습니다.")
-        print("✅ 작업 완료!")
+        # 완료 메시지도 삭제 (main.py에서만 표시)
         return result
     except Exception as e:
         logger.error(f"'{agent_name}' Agent 실행 중 오류 발생: {str(e)}", exc_info=True)
