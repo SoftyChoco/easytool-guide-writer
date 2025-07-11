@@ -22,6 +22,12 @@
 
 만들어진 글은 데이터베이스에 깔끔하게 저장되고, 중복된 내용은 알아서 걸러줘요!
 
+## 주요 기능 ✨
+
+- **다국어 지원**: 한국어(ko)와 영어(en) 콘텐츠를 모두 생성할 수 있어요!
+- **강력한 JSON 파싱**: 오류가 발생해도 자동으로 복구하여 파이프라인이 중단되지 않아요!
+- **자동화된 콘텐츠 생성**: 작성부터 검토까지 모든 과정이 자동화되어 있어요!
+
 ## 시작하기 🚀
 
 ### 1. 내려받기
@@ -76,7 +82,13 @@ python setup.py
 ### 1. 실행하기
 
 ```bash
+# 한국어 콘텐츠 생성 (기본값)
 python main.py
+
+# 영어 콘텐츠 생성
+python main.py --locale en
+# 또는 줄여서
+python main.py --l en
 ```
 
 ### 2. 작동 과정
@@ -100,7 +112,7 @@ sqlite3 easytool_content.db
 SQLite에서 이런 명령어로 확인해보세요:
 
 ```sql
-SELECT id, tool_name, title FROM articles;
+SELECT id, tool_name, title, locale FROM articles;
 ```
 
 특정 글의 내용이 궁금하다면:
@@ -118,9 +130,14 @@ easytool-guide-writer/
   ├── feature.py        # 기능 목록
   ├── main.py           # 메인 실행 파일
   ├── prompts/          # AI 친구들을 위한 지시문
-  │   ├── creator.md    # 작성자 지시문
-  │   ├── decider.md    # 최종결정자 지시문
-  │   └── editor.md     # 편집자 지시문
+  │   ├── ko/           # 한국어 프롬프트
+  │   │   ├── creator.md    # 작성자 지시문
+  │   │   ├── decider.md    # 최종결정자 지시문
+  │   │   └── editor.md     # 편집자 지시문
+  │   └── en/           # 영어 프롬프트
+  │       ├── creator.md    # 작성자 지시문
+  │       ├── decider.md    # 최종결정자 지시문
+  │       └── editor.md     # 편집자 지시문
   ├── README.md         # 지금 읽고 계신 이 파일!
   ├── requirements.txt  # 필요한 패키지 목록
   └── setup.py          # 초기 설정 스크립트
@@ -136,15 +153,21 @@ easytool-guide-writer/
 - `editor.md`: 어떻게 글을 다듬을지
 - `decider.md`: 어떤 기준으로 검토할지
 
+각 언어별로 별도의 폴더(`ko/`, `en/`)에 프롬프트가 있어요!
+
 ### 기능 목록 수정하기
 
-`feature.py` 파일의 `FEATURES_JSON` 부분을 수정해서 원하는 가이드 목록을 만들 수 있어요.
+`feature.py` 파일의 `fetch_features_from_url` 함수를 통해 각 언어별 기능 목록을 가져와요.
 
 ## 문제가 생겼어요! 🛠️
 
 ### API 키 문제
 
 "❌ Gemini 설정 오류" 메시지가 나타나면 `.env` 파일에 API 키가 제대로 들어있는지 확인해보세요.
+
+### JSON 파싱 오류
+
+JSON 파싱 오류가 발생해도 걱정하지 마세요! 자동으로 복구하여 파이프라인이 계속 진행됩니다. 만약 계속해서 오류가 발생한다면 `agents.py` 파일의 JSON 파싱 로직을 확인해보세요.
 
 ### 글 생성 문제
 

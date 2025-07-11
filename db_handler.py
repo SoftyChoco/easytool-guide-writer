@@ -22,17 +22,17 @@ def db_connect():
     """데이터베이스 커넥션을 생성합니다."""
     return sqlite3.connect(DB_NAME, detect_types=sqlite3.PARSE_DECLTYPES)
 
-def get_published_tool_names(conn):
-    """'articles' 테이블에서 이미 발행된 글의 tool_name 목록을 가져옵니다."""
+def get_published_tool_names(conn, locale='ko'):
+    """'articles' 테이블에서 이미 발행된 글의 tool_name 목록을 지정된 언어로 가져옵니다."""
     cursor = conn.cursor()
-    cursor.execute("SELECT tool_name FROM articles")
+    cursor.execute("SELECT tool_name FROM articles WHERE locale = ?", (locale,))
     return [row[0] for row in cursor.fetchall()]
 
-def create_pipeline_entry(conn, tool_name):
+def create_pipeline_entry(conn, tool_name, locale='ko'):
     """'pipeline_logs'에 새로운 작업 로그를 생성하고 ID를 반환합니다."""
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO pipeline_logs (tool_name, status, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                   (tool_name, 'INITIATED', datetime.datetime.now(), datetime.datetime.now()))
+    cursor.execute("INSERT INTO pipeline_logs (tool_name, status, locale, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                   (tool_name, 'INITIATED', locale, datetime.datetime.now(), datetime.datetime.now()))
     conn.commit()
     return cursor.lastrowid
 
@@ -46,10 +46,10 @@ def update_pipeline_step(conn, pipeline_id, **kwargs):
     cursor.execute(f"UPDATE pipeline_logs SET {fields} WHERE id = ?", values)
     conn.commit()
 
-def save_approved_article(conn, pipeline_id, tool_name, final_content, article_data):
+def save_approved_article(conn, pipeline_id, tool_name, final_content, article_data, locale='ko'):
     """승인된 아티클과 관련 메타데이터를 'articles' 테이블에 저장합니다."""
     print("\n" + "="*50)
-    print("🤖 AI 최종결정자 승인! 콘텐츠를 자동으로 저장합니다.")
+    print(f"🤖 AI 최종결정자 승인! {locale} 언어의 콘텐츠를 자동으로 저장합니다.")
     print(f"   - 제목: {article_data['title']}")
     print("="*50)
     
@@ -59,8 +59,8 @@ def save_approved_article(conn, pipeline_id, tool_name, final_content, article_d
     cursor.execute("""
         INSERT INTO articles (
             pipeline_log_id, tool_name, title, meta_description, 
-            content_markdown, structured_data_json, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            content_markdown, structured_data_json, published_at, locale
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         pipeline_id, 
         tool_name, 
@@ -68,7 +68,8 @@ def save_approved_article(conn, pipeline_id, tool_name, final_content, article_d
         article_data['meta_description'],
         final_content,
         json.dumps(article_data['faq_json_ld'], ensure_ascii=False),
-        datetime.datetime.now()
+        datetime.datetime.now(),
+        locale
     ))
     conn.commit()
-    print("\n🎉 'articles' 테이블에 콘텐츠가 성공적으로 저장되었습니다.")
+    print(f"\n🎉 'articles' 테이블에 {locale} 언어의 콘텐츠가 성공적으로 저장되었습니다.")
